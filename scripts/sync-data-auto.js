@@ -1,17 +1,11 @@
 /**
  * Data synchronization script for AWS Amplify Gen2 Next.js applications
- *
- * This script:
- * 1. Exports data from the local sandbox or cloud environment
- * 2. Imports data to the target environment (local or cloud)
- * 3. Provides options for selective data synchronization
- * 4. Syncs data between localStorage and DynamoDB
+ * Automatic version that performs two-way sync without user input
  */
 
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
-const readline = require('readline');
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, ScanCommand, PutCommand, BatchWriteCommand } = require('@aws-sdk/lib-dynamodb');
 
@@ -92,23 +86,6 @@ function execute(command, options = {}) {
     }
     return null;
   }
-}
-
-/**
- * Prompts the user for input
- */
-function prompt(question) {
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout
-  });
-
-  return new Promise(resolve => {
-    rl.question(question, answer => {
-      rl.close();
-      resolve(answer);
-    });
-  });
 }
 
 /**
@@ -316,85 +293,63 @@ async function importData(target, exportFile) {
 }
 
 /**
- * Main function
+ * Main function - automatically performs two-way sync
  */
 async function main() {
-  log('Data Synchronization Tool', 'info');
-  log('------------------------', 'info');
+  log('Data Synchronization Tool (Automatic Two-Way Sync)', 'info');
+  log('----------------------------------------------', 'info');
 
-  // Get synchronization direction
-  log('Select synchronization direction:');
-  log('1. Local to Cloud (push)');
-  log('2. Cloud to Local (pull)');
-  log('3. Two-way sync (merge)');
+  // Perform two-way sync
+  log('Performing two-way sync...', 'info');
 
-  const direction = await prompt('Enter your choice (1, 2, or 3): ');
+  // Export from both environments
+  const localExportFile = await exportData('local');
+  const cloudExportFile = await exportData('cloud');
 
-  if (direction === '1') {
-    // Local to Cloud
-    const exportFile = await exportData('local');
-    await importData('cloud', exportFile);
-  } else if (direction === '2') {
-    // Cloud to Local
-    const exportFile = await exportData('cloud');
-    await importData('local', exportFile);
-  } else if (direction === '3') {
-    // Two-way sync
-    log('Performing two-way sync...', 'info');
+  // Read the exported data
+  const localData = JSON.parse(fs.readFileSync(localExportFile, 'utf8')).data;
+  const cloudData = JSON.parse(fs.readFileSync(cloudExportFile, 'utf8')).data;
 
-    // Export from both environments
-    const localExportFile = await exportData('local');
-    const cloudExportFile = await exportData('cloud');
+  // Merge the data (simple approach: use a Map with ID as key)
+  const mergedData = new Map();
 
-    // Read the exported data
-    const localData = JSON.parse(fs.readFileSync(localExportFile, 'utf8')).data;
-    const cloudData = JSON.parse(fs.readFileSync(cloudExportFile, 'utf8')).data;
+  // Add all cloud data
+  cloudData.forEach(item => {
+    mergedData.set(item.id, item);
+  });
 
-    // Merge the data (simple approach: use a Map with ID as key)
-    const mergedData = new Map();
+  // Add or update with local data
+  localData.forEach(item => {
+    // If the item exists in both, use the one with the most recent updatedAt
+    if (mergedData.has(item.id)) {
+      const cloudItem = mergedData.get(item.id);
+      const cloudUpdatedAt = new Date(cloudItem.updatedAt).getTime();
+      const localUpdatedAt = new Date(item.updatedAt).getTime();
 
-    // Add all cloud data
-    cloudData.forEach(item => {
-      mergedData.set(item.id, item);
-    });
-
-    // Add or update with local data
-    localData.forEach(item => {
-      // If the item exists in both, use the one with the most recent updatedAt
-      if (mergedData.has(item.id)) {
-        const cloudItem = mergedData.get(item.id);
-        const cloudUpdatedAt = new Date(cloudItem.updatedAt).getTime();
-        const localUpdatedAt = new Date(item.updatedAt).getTime();
-
-        if (localUpdatedAt > cloudUpdatedAt) {
-          mergedData.set(item.id, item);
-        }
-      } else {
+      if (localUpdatedAt > cloudUpdatedAt) {
         mergedData.set(item.id, item);
       }
-    });
+    } else {
+      mergedData.set(item.id, item);
+    }
+  });
 
-    // Convert the Map back to an array
-    const mergedItems = Array.from(mergedData.values());
+  // Convert the Map back to an array
+  const mergedItems = Array.from(mergedData.values());
 
-    // Write the merged data to a file
-    const mergedFile = path.join(path.dirname(localExportFile), `merged-export-${new Date().toISOString().replace(/[:.]/g, '-')}.json`);
-    fs.writeFileSync(mergedFile, JSON.stringify({
-      timestamp: new Date().toISOString(),
-      source: 'merged',
-      data: mergedItems,
-    }, null, 2));
+  // Write the merged data to a file
+  const mergedFile = path.join(path.dirname(localExportFile), `merged-export-${new Date().toISOString().replace(/[:.]/g, '-')}.json`);
+  fs.writeFileSync(mergedFile, JSON.stringify({
+    timestamp: new Date().toISOString(),
+    source: 'merged',
+    data: mergedItems,
+  }, null, 2));
 
-    // Import the merged data to both environments
-    await importData('local', mergedFile);
-    await importData('cloud', mergedFile);
+  // Import the merged data to both environments
+  await importData('local', mergedFile);
+  await importData('cloud', mergedFile);
 
-    log('Two-way sync completed successfully!', 'success');
-  } else {
-    log('Invalid choice. Please enter 1, 2, or 3.', 'error');
-    process.exit(1);
-  }
-
+  log('Two-way sync completed successfully!', 'success');
   log('Data synchronization completed successfully!', 'success');
 }
 

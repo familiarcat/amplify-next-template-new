@@ -157,10 +157,12 @@ The application automatically detects whether it's connected to the backend or r
 
 ### Data Synchronization
 
-The `sync-data` script provides powerful data synchronization capabilities:
+This project provides two powerful data synchronization tools to ensure consistency between local and deployed environments:
+
+#### 1. Basic Data Synchronization
 
 ```bash
-# Run the data synchronization tool
+# Run the basic data synchronization tool
 npm run sync-data
 ```
 
@@ -168,6 +170,31 @@ This tool will prompt you to choose a synchronization direction:
 1. **Local to Cloud**: Push your local changes to the cloud
 2. **Cloud to Local**: Pull cloud data to your local environment
 3. **Two-way Sync**: Merge data from both environments, resolving conflicts based on timestamps
+
+#### 2. Advanced Amplify Gen2 Data Synchronization
+
+For more robust synchronization using Amplify Gen2 APIs:
+
+```bash
+# Interactive mode - choose synchronization direction
+npm run sync-amplify
+
+# Push local data to deployed environment
+npm run sync-amplify:local-to-deployed
+
+# Pull deployed data to local environment
+npm run sync-amplify:deployed-to-local
+
+# Two-way synchronization (merge data from both environments)
+npm run sync-amplify:two-way
+```
+
+The advanced synchronization tool:
+
+- Uses Amplify Gen2 GraphQL APIs for direct database access
+- Performs intelligent conflict resolution based on timestamps
+- Maintains data integrity across environments
+- Supports automatic detection of new and updated records
 
 ### Local Storage Simulation
 

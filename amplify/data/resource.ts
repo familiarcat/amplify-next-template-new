@@ -12,7 +12,7 @@ const schema = a.schema({
       createdAt: a.datetime(),
       updatedAt: a.datetime(),
     })
-    .authorization((allow) => [allow.owner(), allow.publicApiKey().to(['read'])]),
+    .authorization((allow) => [allow.owner(), allow.publicApiKey().to(['read', 'create'])]),
 
   // Define AI Kit for chat functionality
   chat: a
