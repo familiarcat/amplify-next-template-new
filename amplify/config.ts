@@ -1,7 +1,6 @@
-import { ResourceConfig } from '@aws-amplify/backend';
-import { createAmplifyConfig } from 'aws-amplify';
+// Configuration for Amplify Gen2
 
-export const config = createAmplifyConfig({
+export const config = {
   name: 'todo-app',
   appId: process.env.NEXT_PUBLIC_AMPLIFY_APP_ID,
   backend: {
@@ -18,7 +17,7 @@ export const config = createAmplifyConfig({
         },
       },
     },
-  },
-});
+  }
+};
 
-export type AmplifyConfig = ResourceConfig<typeof config>;
+export type AmplifyConfig = typeof config;

@@ -1,5 +1,16 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Disable server components for compatibility with Amplify
+  experimental: {
+    serverComponentsExternalPackages: [],
+  },
+  // Output directory
+  distDir: 'build',
+  // Environment variables
+  env: {
+    NEXT_PUBLIC_BUILD_MODE: 'production',
+  },
+  // Webpack configuration
   webpack: (config) => {
     // Add fallbacks for Node.js modules
     config.resolve.fallback = {
@@ -31,10 +42,6 @@ const nextConfig = {
 
     return config;
   },
-  // Disable server components for compatibility with Amplify
-  experimental: {
-    serverComponentsExternalPackages: ['@aws-crypto']
-  },
 };
 
-module.exports = nextConfig
+module.exports = nextConfig;

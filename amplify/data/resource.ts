@@ -1,4 +1,4 @@
-import { type ClientSchema, a, defineData } from "@aws-amplify/backend";
+import { a, defineData, type ClientSchema } from "@aws-amplify/backend";
 
 /**
  * Define the data schema for the application
@@ -8,12 +8,19 @@ const schema = a.schema({
   Todo: a
     .model({
       content: a.string().required(),
-      createdAt: a.datetime().required(),
-      updatedAt: a.datetime().required(),
-      status: a.enum(['PENDING', 'COMPLETED', 'ARCHIVED']),
-      priority: a.integer().default(1),
-      owner: a.string().required(), // Add owner field for authorization
+      completed: a.boolean().default(false),
+      createdAt: a.datetime(),
+      updatedAt: a.datetime(),
     })
+    .authorization((allow) => [allow.owner(), allow.publicApiKey().to(['read'])]),
+
+  // Define AI Kit for chat functionality
+  chat: a
+    .conversation({
+      aiModel: a.ai.model("Claude 3.5 Sonnet"),
+      systemPrompt: "You are a helpful AI assistant.",
+    })
+    .authorization((allow) => allow.owner()),
 });
 
 export type Schema = ClientSchema<typeof schema>;
@@ -22,7 +29,9 @@ export const data = defineData({
   schema,
   authorizationModes: {
     defaultAuthorizationMode: "userPool",
-    // Remove apiKey mode since we're using Cognito User Pools
+    apiKeyAuthorizationMode: {
+      expiresInDays: 30,
+    },
   },
 });
 

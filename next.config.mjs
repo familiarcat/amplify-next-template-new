@@ -1,5 +1,8 @@
-/** @type {import('next').NextConfig} */
+/**
+ * @type {import('next').NextConfig}
+ */
 const nextConfig = {
+  // Simple webpack configuration that just handles Node.js module errors
   webpack: (config) => {
     // Add fallbacks for Node.js modules
     config.resolve.fallback = {
@@ -22,19 +25,8 @@ const nextConfig = {
       child_process: false,
     };
 
-    // Ignore all modules that cause issues with Next.js
-    config.module = {
-      ...config.module,
-      exprContextCritical: false,
-      unknownContextCritical: false,
-    };
-
     return config;
-  },
-  // Disable server components for compatibility with Amplify
-  experimental: {
-    serverComponentsExternalPackages: ['@aws-crypto']
   },
 };
 
-module.exports = nextConfig
+export default nextConfig;
