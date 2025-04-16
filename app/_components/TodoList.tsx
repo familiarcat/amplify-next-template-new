@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { client } from "@/app/client";
+import { client, Todo } from "@/app/client";
 import { Schema } from "@/amplify/data/resource";
 import { Button, Flex, Heading, Text, TextField, CheckboxField, View, useTheme } from "@aws-amplify/ui-react";
 import { useAuth } from "./LocalAuthProvider";
+import { DataStore } from 'aws-amplify/datastore';
 
-type Todo = Schema["Todo"]["type"];
+type TodoType = Schema["Todo"]["type"];
 
 // Safely access localStorage
 const getLocalStorage = () => {
@@ -22,90 +23,61 @@ const getIsLocal = () => {
 };
 
 export function TodoList() {
-  const [todos, setTodos] = useState<Todo[]>([]);
-  const [localTodos, setLocalTodos] = useState<Todo[]>([]);
+  const [todos, setTodos] = useState<TodoType[]>([]);
   const [newTodo, setNewTodo] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isConnected, setIsConnected] = useState(false);
-  const [isLocal, setIsLocal] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
   const { tokens } = useTheme();
 
-  // Get auth context if in local mode
-  let auth: any = null;
-  try {
-    auth = useAuth();
-  } catch (err) {
-    // This will throw an error if not used within LocalAuthProvider
-    // We'll just ignore it since we're checking isLocal anyway
-  }
-
   // Set up the component on mount
   useEffect(() => {
-    setIsLocal(getIsLocal());
     setIsMounted(true);
-  }, []);
 
-  // Determine which todos to display
-  const displayTodos = isLocal && !isConnected ? localTodos : todos;
-
-  // Load local todos from localStorage
-  useEffect(() => {
-    if (isLocal && isMounted) {
-      const storage = getLocalStorage();
-      if (!storage) return;
-
-      const storedTodos = storage.getItem('localTodos');
-      if (storedTodos) {
-        try {
-          setLocalTodos(JSON.parse(storedTodos));
-        } catch (err) {
-          console.error('Error parsing stored todos:', err);
-        }
-      }
-    }
-  }, [isLocal, isMounted]);
-
-  // Save local todos to localStorage when they change
-  useEffect(() => {
-    if (isLocal && isMounted && localTodos.length > 0) {
-      const storage = getLocalStorage();
-      if (!storage) return;
-
-      storage.setItem('localTodos', JSON.stringify(localTodos));
-    }
-  }, [localTodos, isLocal, isMounted]);
-
-  // Try to connect to the backend and fetch todos
-  useEffect(() => {
-    // Only run this effect if the component is mounted
-    if (!isMounted) return;
-
-    async function checkConnectionAndFetchTodos() {
+    // Start DataStore and subscribe to changes
+    const startDataStore = async () => {
       try {
-        // Check if we can connect to the backend
-        const { data } = await client.models.Todo.list();
-        setTodos(data);
-        setIsConnected(true);
-        setError(null);
-        console.log('Connected to backend successfully');
+        // Clear any existing data
+        await DataStore.clear();
+
+        // Start DataStore
+        await DataStore.start();
+
+        // Fetch initial todos
+        fetchTodos();
+
+        // Subscribe to changes
+        const subscription = DataStore.observeQuery(Todo).subscribe(({ items }) => {
+          console.log('DataStore subscription update:', items);
+          setTodos(items as TodoType[]);
+          setLoading(false);
+        });
+
+        return () => subscription.unsubscribe();
       } catch (err) {
-        console.error('Error connecting to backend:', err);
-        setIsConnected(false);
-        if (isLocal) {
-          // In local mode, we'll use localStorage instead
-          console.log('Using local storage for todos');
-        } else {
-          setError('Failed to connect to backend. Please try again later.');
-        }
-      } finally {
+        console.error('Error starting DataStore:', err);
+        setError('Failed to initialize data synchronization. Please refresh the page.');
         setLoading(false);
       }
-    }
+    };
 
-    checkConnectionAndFetchTodos();
-  }, [isMounted, isLocal]);
+    startDataStore();
+  }, []);
+
+  // Fetch todos from DataStore
+  async function fetchTodos() {
+    try {
+      const todoItems = await DataStore.query(Todo);
+      console.log('Fetched todos from DataStore:', todoItems);
+      setTodos(todoItems as TodoType[]);
+      setError(null);
+      setLoading(false);
+    } catch (err) {
+      console.error('Error fetching todos:', err);
+      setError('Failed to fetch todos. Please try again.');
+      setLoading(false);
+    }
+  }
 
   // Create a new todo
   async function createTodo(e: React.FormEvent) {
@@ -113,33 +85,19 @@ export function TodoList() {
     if (!newTodo.trim()) return;
 
     try {
-      if (isLocal && !isConnected) {
-        // Create todo locally
-        const newTodoItem: Todo = {
-          id: Date.now().toString(),
+      // Create todo in DataStore
+      const createdTodo = await DataStore.save(
+        new Todo({
           content: newTodo,
           completed: false,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
-          owner: auth?.user?.username || 'local-user',
-        } as Todo;
+        })
+      );
 
-        setLocalTodos([newTodoItem, ...localTodos]);
-      } else {
-        // Create todo in the backend
-        const { data: createdTodo } = await client.models.Todo.create({
-          content: newTodo,
-          completed: false,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        });
-
-        if (createdTodo) {
-          setTodos([createdTodo, ...todos]);
-        }
-      }
-
+      console.log('Created todo in DataStore:', createdTodo);
       setNewTodo("");
+      // No need to update state manually as the subscription will handle it
     } catch (err) {
       console.error("Error creating todo:", err);
       setError("Failed to create todo. Please try again.");
@@ -147,29 +105,25 @@ export function TodoList() {
   }
 
   // Toggle todo completion status
-  async function toggleTodoStatus(todo: Todo) {
+  async function toggleTodoStatus(todo: TodoType) {
     try {
-      if (isLocal && !isConnected) {
-        // Update todo locally
-        const updatedTodo = {
-          ...todo,
-          completed: !todo.completed,
-          updatedAt: new Date().toISOString(),
-        };
-
-        setLocalTodos(localTodos.map(t => t.id === todo.id ? updatedTodo : t));
-      } else {
-        // Update todo in the backend
-        const { data: updatedTodo } = await client.models.Todo.update({
-          id: todo.id,
-          completed: !todo.completed,
-          updatedAt: new Date().toISOString(),
-        });
-
-        if (updatedTodo) {
-          setTodos(todos.map(t => t.id === updatedTodo.id ? updatedTodo : t));
-        }
+      // Get the original item from DataStore
+      const original = await DataStore.query(Todo, todo.id);
+      if (!original) {
+        console.error('Todo not found in DataStore:', todo.id);
+        return;
       }
+
+      // Update todo in DataStore
+      await DataStore.save(
+        Todo.copyOf(original, updated => {
+          updated.completed = !todo.completed;
+          updated.updatedAt = new Date().toISOString();
+        })
+      );
+
+      console.log('Updated todo in DataStore:', todo.id);
+      // No need to update state manually as the subscription will handle it
     } catch (err) {
       console.error("Error updating todo:", err);
       setError("Failed to update todo. Please try again.");
@@ -179,23 +133,22 @@ export function TodoList() {
   // Delete a todo
   async function deleteTodo(id: string) {
     try {
-      if (isLocal && !isConnected) {
-        // Delete todo locally
-        setLocalTodos(localTodos.filter(todo => todo.id !== id));
-      } else {
-        // Delete todo in the backend
-        await client.models.Todo.delete({ id });
-        setTodos(todos.filter(todo => todo.id !== id));
+      // Get the original item from DataStore
+      const todoToDelete = await DataStore.query(Todo, id);
+      if (!todoToDelete) {
+        console.error('Todo not found in DataStore:', id);
+        return;
       }
+
+      // Delete todo from DataStore
+      await DataStore.delete(todoToDelete);
+
+      console.log('Deleted todo from DataStore:', id);
+      // No need to update state manually as the subscription will handle it
     } catch (err) {
       console.error("Error deleting todo:", err);
       setError("Failed to delete todo. Please try again.");
     }
-  }
-
-  // Toggle between local and connected mode (for testing)
-  function toggleMode() {
-    setIsConnected(!isConnected);
   }
 
   // Don't render anything until the component is mounted
@@ -214,21 +167,11 @@ export function TodoList() {
 
       {error && <Text color="red">{error}</Text>}
 
-      {isLocal && (
-        <Flex marginBottom={tokens.space.small}>
-          <Text fontSize={tokens.fontSizes.xs}>
-            Mode: {isConnected ? 'Connected to backend' : 'Using local storage'}
-          </Text>
-          <Button
-            size="small"
-            variation="link"
-            onClick={toggleMode}
-            marginLeft={tokens.space.xs}
-          >
-            Switch to {isConnected ? 'Local' : 'Connected'} Mode
-          </Button>
-        </Flex>
-      )}
+      <Flex marginBottom={tokens.space.small}>
+        <Text fontSize={tokens.fontSizes.xs}>
+          Mode: DataStore with automatic synchronization
+        </Text>
+      </Flex>
 
       <form onSubmit={createTodo}>
         <Flex direction="row" alignItems="center">
@@ -247,10 +190,10 @@ export function TodoList() {
       </form>
 
       <View marginTop={tokens.space.medium}>
-        {displayTodos.length === 0 ? (
+        {todos.length === 0 ? (
           <Text>No todos yet. Add one above!</Text>
         ) : (
-          displayTodos.map((todo) => (
+          todos.map((todo) => (
             <Flex
               key={todo.id}
               direction="row"
