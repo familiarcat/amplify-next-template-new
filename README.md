@@ -24,20 +24,42 @@ This template equips you with a foundational Next.js application integrated with
 - AWS CLI configured with your credentials
 - Amplify CLI installed globally (`npm install -g @aws-amplify/cli`)
 
+### AWS Credentials Setup
+
+This project uses AWS credentials for authentication with AWS services. Follow these steps to set up your credentials securely:
+
+1. Configure your AWS CLI with the appropriate profile:
+   ```bash
+   aws configure --profile AmplifyUser
+   ```
+
+2. Enter your AWS Access Key ID and Secret Access Key when prompted
+3. Set the default region to `us-east-1` (or your preferred region)
+4. Set the output format to `json`
+
+**IMPORTANT: Never commit AWS credentials to your repository. Always use AWS profiles or environment variables.**
+
 ### Installation
 
 1. Clone this repository
-2. Run the setup script:
+2. Copy the example environment file:
+   ```bash
+   cp .env.example .env.local
+   ```
+
+3. Update the `.env.local` file with your AWS profile name and Amplify app details
+
+4. Run the setup script:
    ```bash
    npm run setup
    ```
 
    This script will:
    - Check if your AWS credentials are configured
-   - Set up the .env.local file if it doesn't exist
+   - Set up the environment files if they don't exist
    - Install dependencies if needed
 
-3. Initialize your Amplify project:
+5. Initialize your Amplify project:
    ```bash
    npm run init
    ```
@@ -175,6 +197,24 @@ If deployment fails:
 3. Ensure your Amplify app is properly configured
 
 ## Security
+
+### Credentials Management
+
+This project follows AWS security best practices for credentials management:
+
+1. **Use AWS Profiles**: Always use AWS profiles instead of hardcoding credentials
+2. **Environment Variables**: Store sensitive information in environment variables
+3. **Gitignore**: All environment files (`.env.*`) are excluded from Git
+4. **Example Files**: Only commit example environment files without real credentials
+5. **AWS IAM Best Practices**: Follow the principle of least privilege when creating IAM users
+
+### Local Development Security
+
+When developing locally:
+
+1. **Use Sandbox Mode**: The Amplify Sandbox creates isolated resources for development
+2. **Local Storage**: Sensitive data in local storage is only used for development
+3. **API Keys**: Development API keys have limited permissions and expiration times
 
 See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more information.
 
